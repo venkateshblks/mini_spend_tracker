@@ -1,6 +1,6 @@
 # Mini Spend Tracker
 
-A small single-user Python REST API with PostgreSQL persistence (Supabase supported) and a plain HTML/JavaScript UI. Add expenses, filter the list, compare monthly totals, and flag categories whose spending grew by more than 20%.
+A small single-user Python REST API with PostgreSQL persistence (Supabase supported) and a plain HTML/JavaScript UI. Add expenses, filter the list, and compare monthly totals.
 
 ## Connect Supabase and run locally
 
@@ -73,7 +73,13 @@ python -m pytest -q
 
 The local-only Compose credentials are disposable examples, not cloud credentials. Use a separate local database for application development if you do not want to use Supabase. GitHub Actions runs this suite against a PostgreSQL service using the included workflow.
 
-Tests cover persistence across app instances, exact monetary totals, validation, inclusive filters, SQL parameter binding, calendar boundaries, zero baselines, category insights, PostgreSQL constraints, transaction rollback, repeatable initialization, and database failure responses.
+Tests cover persistence across app instances, exact monetary totals, validation, inclusive filters, SQL parameter binding, calendar boundaries, zero baselines, PostgreSQL constraints, transaction rollback, repeatable initialization, and database failure responses.
+
+## Frontend filters
+
+The Expenses section shows 20 expenses per page, newest first. Previous/Next fetch only the requested page. Enter a category (suggestions include categories already loaded), either or both dates, and click **Apply filters**. Dates are inclusive; **Clear filters** resets to the first page without filters. A reversed date range shows an error. Filters are sent to `GET /expenses` and remain active after saving an expense.
+
+The monthly summary uses the selected month and all categories, independently of the expense-list filters. It shows total spending, spending by category, and the change in total spending versus the previous month.
 
 ## API
 
@@ -93,7 +99,17 @@ curl -X POST http://127.0.0.1:5000/expenses -H 'Content-Type: application/json' 
 
 ### `GET /expenses`
 
-Returns an array ordered by date descending, then ID descending. Optional filters combine with AND; both date boundaries are inclusive:
+Returns a paginated object ordered by date descending, then ID descending. `limit` defaults to 20 (1–100); `offset` defaults to 0 (0–2147483647). Example: `/expenses?limit=20&offset=20` returns the second page.
+
+```json
+{"expenses": [], "limit": 20, "offset": 0, "has_more": false}
+```
+
+`expenses` contains the expense records. `has_more` enables the Next button. PostgreSQL uses bound `LIMIT`/`OFFSET`, fetching only one extra row to detect the next page without counting or loading the full result set. Filters apply before pagination; summaries still cover the entire selected month. Changing filters or saving returns the UI to page one. Category suggestions come from loaded pages and the monthly summary; any category can also be typed.
+
+Offset pagination is simple for this demo; concurrent inserts can shift later pages, and deep offsets cost more database work. Cursor pagination using date and ID would be a future improvement.
+
+ Optional filters combine with AND; both date boundaries are inclusive:
 
 ```text
 /expenses?category=food&start_date=2026-09-01&end_date=2026-09-30
@@ -115,12 +131,11 @@ Example response, assuming 100.00 was spent on food in August and 125.50 in Sept
   "previous_month": "2026-08",
   "previous_month_total": "100.00",
   "month_over_month_change": "25.50",
-  "month_over_month_change_percent": 25.5,
-  "insights": [{"category": "food", "change_percent": 25.5}]
+  "month_over_month_change_percent": 25.5
 }
 ```
 
-Percentage change is `(current - previous) / previous * 100`, rounded to two decimals. If previous spending is zero, percentage change is `null`, even when both months are empty. Categories without a prior baseline are not flagged. Exactly 20% growth is not flagged. Month `0001-01` is rejected because it has no representable previous month.
+Percentage change is `(current - previous) / previous * 100`, rounded to two decimals. If previous spending is zero, percentage change is `null`, even when both months are empty. Month `0001-01` is rejected because it has no representable previous month.
 
 Errors have a consistent shape:
 
@@ -140,7 +155,7 @@ Validation/malformed JSON returns `400`, a non-JSON POST returns `415`, a body o
 
 ## With more time
 
-Add user accounts and per-user authorization before exposing personal spending publicly, pagination for large lists, edit/delete with an audit trail, schema migrations, backups, and a configured currency/timezone. Add automated browser tests, application connection pooling for heavier workloads, and a least-privilege runtime database role separate from the schema owner.
+Add user accounts and per-user authorization before exposing personal spending publicly, cursor pagination for very large lists, edit/delete with an audit trail, schema migrations, backups, and a configured currency/timezone. Add automated browser tests, application connection pooling for heavier workloads, and a least-privilege runtime database role separate from the schema owner.
 
 Render deployment configuration is included; deployment still requires your repository and Supabase connection configuration. Authentication is not included: everyone with access to the Flask API shares the same expenses.
 

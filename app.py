@@ -131,7 +131,14 @@ def create_app(config=None):
 
     @app.get("/expenses")
     def list_expenses():
-        check_query({"category", "start_date", "end_date"})
+        check_query({"category", "start_date", "end_date", "limit", "offset"})
+        paging = {}
+        for key, default, minimum, maximum in (("limit", "20", 1, 100), ("offset", "0", 0, 2147483647)):
+            raw = request.args.get(key, default)
+            if not re.fullmatch(r"[0-9]{1,10}", raw) or not minimum <= int(raw) <= maximum:
+                raise BadRequest(f"{key} must be an integer between {minimum} and {maximum}.")
+            paging[key] = int(raw)
+        limit, offset = paging["limit"], paging["offset"]
         clauses, params = [], []
         if "category" in request.args:
             clauses.append("category = %s")
@@ -145,9 +152,15 @@ def create_app(config=None):
         if dates.get("start_date", "") > dates.get("end_date", "9999-12-31"):
             raise BadRequest("start_date must not be after end_date.")
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
-        rows = get_db().execute("SELECT * FROM expenses" + where + " ORDER BY date DESC, id DESC", params)
-        return jsonify([dict(id=row["id"], amount=money(row["amount_cents"]),
-                             category=row["category"], note=row["note"], date=row["date"].isoformat()) for row in rows])
+        # Fetch only one page plus a look-ahead row; no full-table count needed.
+        rows = get_db().execute(
+            "SELECT * FROM expenses" + where + " ORDER BY date DESC, id DESC LIMIT %s OFFSET %s",
+            params + [limit + 1, offset],
+        ).fetchall()
+        expenses = [dict(id=row["id"], amount=money(row["amount_cents"]),
+                         category=row["category"], note=row["note"], date=row["date"].isoformat())
+                    for row in rows[:limit]]
+        return jsonify(expenses=expenses, limit=limit, offset=offset, has_more=len(rows) > limit)
 
     @app.get("/summary")
     def summary():
@@ -169,16 +182,10 @@ def create_app(config=None):
         for row in rows:
             (current if row["month"] == month else previous)[row["category"]] = int(row["cents"])
         total, previous_total = sum(current.values()), sum(previous.values())
-        insights = []
-        for name, cents in sorted(current.items()):
-            old = previous.get(name, 0)
-            # Compare integers: exactly 20% is not more than 20%.
-            if old > 0 and cents * 100 > old * 120:
-                insights.append({"category": name, "change_percent": percent_change(cents, old)})
         return jsonify(month=month, total_spend=money(total),
                        spend_by_category={key: money(value) for key, value in sorted(current.items())},
                        previous_month=previous_first.isoformat()[:7], previous_month_total=money(previous_total),
                        month_over_month_change=money(abs(total - previous_total)) if total >= previous_total else "-" + money(previous_total - total),
-                       month_over_month_change_percent=percent_change(total, previous_total), insights=insights)
+                       month_over_month_change_percent=percent_change(total, previous_total))
 
     return app

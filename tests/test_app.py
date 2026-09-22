@@ -53,7 +53,7 @@ def test_create_and_persist_after_app_restart(client, app):
     assert expense == {"id": 1, "amount": "12.50", "category": "food", "date": "2026-02-10", "note": "lunch"}
     restarted = create_app({"TESTING": True, "DATABASE_URL": app.config["DATABASE_URL"],
                             "DATABASE_SCHEMA": app.config["DATABASE_SCHEMA"]}).test_client()
-    assert restarted.get("/expenses").json == [expense]
+    assert restarted.get("/expenses").json["expenses"] == [expense]
     with app.app_context():
         assert get_db().execute("SELECT amount_cents FROM expenses").fetchone()["amount_cents"] == 1250
 
@@ -72,7 +72,7 @@ def test_invalid_expense_does_not_write(client, field, value):
     response = client.post("/expenses", json=payload)
     assert response.status_code == 400
     assert response.json["error"]["message"]
-    assert client.get("/expenses").json == []
+    assert client.get("/expenses").json["expenses"] == []
 
 
 @pytest.mark.parametrize("field", ["amount", "category", "date"])
@@ -102,11 +102,11 @@ def test_filter_dates_are_inclusive_and_combined_with_category(client):
     add(client, category="transport", date="2026-02-15")
     add(client, date="2026-03-01")
     response = client.get("/expenses?category=FOOD&start_date=2026-02-01&end_date=2026-02-28")
-    assert response.json == [last, first]
-    assert len(client.get("/expenses?start_date=2026-03-01").json) == 1
-    assert len(client.get("/expenses?end_date=2026-01-31").json) == 1
-    assert len(client.get("/expenses?category=transport").json) == 1
-    assert client.get("/expenses?category=missing").json == []
+    assert response.json["expenses"] == [last, first]
+    assert len(client.get("/expenses?start_date=2026-03-01").json["expenses"]) == 1
+    assert len(client.get("/expenses?end_date=2026-01-31").json["expenses"]) == 1
+    assert len(client.get("/expenses?category=transport").json["expenses"]) == 1
+    assert client.get("/expenses?category=missing").json["expenses"] == []
 
 
 @pytest.mark.parametrize("query", [
@@ -120,8 +120,8 @@ def test_invalid_filters(client, query):
 def test_category_is_bound_as_sql_parameter(client):
     unusual = "food'; DROP TABLE expenses; --"
     expense = add(client, category=unusual)
-    assert client.get("/expenses", query_string={"category": unusual}).json == [expense]
-    assert len(client.get("/expenses").json) == 1
+    assert client.get("/expenses", query_string={"category": unusual}).json["expenses"] == [expense]
+    assert len(client.get("/expenses").json["expenses"]) == 1
 
 
 def test_summary_exact_money_and_year_boundary(client):
@@ -137,17 +137,6 @@ def test_summary_exact_money_and_year_boundary(client):
     assert result["previous_month_total"] == "10.00"
     assert result["month_over_month_change"] == "10.00"
     assert result["month_over_month_change_percent"] == 100.0
-    assert result["insights"] == []  # New category has no baseline.
-
-
-def test_insight_threshold_is_strict_and_category_specific(client):
-    for name in ("food", "bills"):
-        add(client, "100.00", category=name, date="2026-01-10")
-    add(client, "120.00", category="food")
-    add(client, "120.01", category="bills")
-    assert client.get("/summary?month=2026-02").json["insights"] == [
-        {"category": "bills", "change_percent": 20.01}
-    ]
 
 
 def test_empty_summary_and_zero_baseline(client):
@@ -158,7 +147,6 @@ def test_empty_summary_and_zero_baseline(client):
     add(client)
     result = client.get("/summary?month=2026-02").json
     assert result["month_over_month_change_percent"] is None
-    assert result["insights"] == []
 
 
 def test_month_with_no_spend_after_active_month(client):
@@ -197,7 +185,7 @@ def test_schema_initialization_is_repeatable(client, app):
     expense = add(client)
     result = app.test_cli_runner().invoke(args=["init-db"])
     assert result.exit_code == 0
-    assert client.get("/expenses").json == [expense]
+    assert client.get("/expenses").json["expenses"] == [expense]
 
 
 def test_health_checks_database(client):
@@ -228,3 +216,41 @@ def test_database_failure_is_generic_json(client, monkeypatch):
 def test_missing_database_configuration():
     with pytest.raises(RuntimeError, match="Set DATABASE_URL"):
         create_app({"DATABASE_URL": ""})
+
+
+def test_pagination_order_boundaries_and_summary(client):
+    records = [add(client, "1.00") for _ in range(21)]
+    first = client.get("/expenses").json
+    assert len(first["expenses"]) == 20
+    assert first["limit"] == 20 and first["offset"] == 0 and first["has_more"] is True
+    assert [row["id"] for row in first["expenses"]] == [r["id"] for r in records[:0:-1]]
+    last = client.get("/expenses?offset=20").json
+    assert last["expenses"] == [records[0]] and last["has_more"] is False
+    assert client.get("/expenses?offset=40").json["expenses"] == []
+    exact = client.get("/expenses?limit=21").json
+    assert len(exact["expenses"]) == 21 and exact["has_more"] is False
+    assert client.get("/summary?month=2026-02").json["total_spend"] == "21.00"
+
+
+def test_pagination_preserves_filters(client):
+    add(client, category="bills")
+    old = add(client, date="2026-02-01")
+    recent = add(client, date="2026-02-28")
+    add(client, date="2026-03-01")
+    query = "/expenses?category=food&start_date=2026-02-01&end_date=2026-02-28&limit=1"
+    first = client.get(query).json
+    second = client.get(query + "&offset=1").json
+    assert first["expenses"] == [recent] and first["has_more"] is True
+    assert second["expenses"] == [old] and second["has_more"] is False
+
+
+@pytest.mark.parametrize("query", ["limit=0", "limit=101", "limit=-1", "limit=1.5", "limit=", "limit=abc",
+                                  "offset=-1", "offset=1.5", "offset=", "offset=2147483648", "limit=1&limit=2"])
+def test_invalid_pagination(client, query):
+    response = client.get("/expenses?" + query)
+    assert response.status_code == 400
+    assert response.json["error"]["code"] == 400
+
+
+def test_empty_pagination_and_maximum_limit(client):
+    assert client.get("/expenses?limit=100").json == {"expenses": [], "limit": 100, "offset": 0, "has_more": False}

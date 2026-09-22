@@ -11,3 +11,6 @@ CREATE INDEX IF NOT EXISTS expenses_category_date ON expenses(category, date);
 -- The server connects as the table owner; anonymous Supabase Data API clients
 -- get no policies and cannot read/write this table. Dashboard access still works.
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+
+CREATE INDEX IF NOT EXISTS expenses_date_id ON expenses(date DESC, id DESC);
+CREATE INDEX IF NOT EXISTS expenses_category_date_id ON expenses(category, date DESC, id DESC);

@@ -29,12 +29,28 @@
           <p class="eyebrow">Total spend</p><p id="total" class="total"></p>
           <p id="comparison"></p>
           <h3>By category</h3><ul id="categories-summary"></ul>
-          <div id="insights"></div>
-          <h3>Expenses this month</h3><p id="empty" hidden>No expenses yet. Add your first one.</p>
-          <div class="table-wrap"><table id="expense-table"><thead><tr><th>Date</th><th>Category / note</th><th>Amount</th></tr></thead><tbody id="expense-rows"></tbody></table></div>
         </div>
       </section>
     </div>
+    <section class="expenses-section" aria-labelledby="expenses-heading">
+      <h2 id="expenses-heading">Expenses</h2>
+      <p class="helper" id="filter-help">Filter the expense list by category and inclusive dates. The monthly summary above always covers all categories for the selected month.</p>
+      <form id="filter-form" class="filters" aria-describedby="filter-help">
+        <label>Filter category<input id="filter-category" name="category" type="search" list="categories" maxlength="50" placeholder="All categories"></label>
+        <label>From date<input id="filter-start" name="start_date" type="date"></label>
+        <label>To date<input id="filter-end" name="end_date" type="date"></label>
+        <div class="filter-actions"><button type="submit">Apply filters</button><button id="clear-filters" type="button" class="secondary">Clear filters</button></div>
+      </form>
+      <p id="expenses-status" role="status" aria-live="polite"></p>
+      <p id="empty" hidden>No expenses match these filters. Try another category or date range.</p>
+      <div class="table-wrap"><table id="expense-table" hidden><thead><tr><th>Date</th><th>Category / note</th><th>Amount</th></tr></thead><tbody id="expense-rows"></tbody></table></div>
+      <nav class="pagination" aria-label="Expense pages">
+        <button id="previous-page" type="button" class="secondary" disabled>Previous</button>
+        <span id="page-label" aria-live="polite">Page 1</span>
+        <button id="next-page" type="button" class="secondary" disabled>Next</button>
+      </nav>
+      <p class="helper">20 expenses per page. Apply or clear filters to return to the first page.</p>
+    </section>
   </main>
 </body>
 </html>
