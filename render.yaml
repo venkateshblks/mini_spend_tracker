@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: mini-spend-tracker
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m flask --app app init-db && waitress-serve --host=0.0.0.0 --port=$PORT --call app:create_app
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: DATABASE_URL
+        sync: false

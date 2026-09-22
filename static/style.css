@@ -1,0 +1,31 @@
+:root { font-family: system-ui, sans-serif; color: #183331; background: #f4f6f3; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1080px; margin: 48px auto; padding: 0 24px; }
+header { margin-bottom: 32px; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); margin: 8px 0; letter-spacing: -.04em; }
+h2 { margin-top: 0; font-size: 1.25rem; }
+h3 { font-size: 1rem; margin-top: 28px; }
+p { line-height: 1.55; }
+.eyebrow { text-transform: uppercase; letter-spacing: .1em; font-size: .75rem; font-weight: 700; color: #526b63; }
+.layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 24px; align-items: start; }
+section { background: white; padding: 28px; border: 1px solid #dce4dd; border-radius: 16px; }
+label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 18px; }
+label span { font-weight: 400; color: #58665f; }
+input, textarea, button { font: inherit; width: 100%; padding: 11px; border-radius: 7px; border: 1px solid #aebdb5; margin-top: 7px; }
+textarea { resize: vertical; }
+button { background: #205846; color: white; cursor: pointer; border: 0; font-weight: 600; }
+button:disabled { opacity: .6; cursor: wait; }
+:focus-visible { outline: 3px solid #8baa47; outline-offset: 3px; }
+.summary-heading { display: flex; justify-content: space-between; gap: 16px; align-items: start; }
+.summary-heading label { max-width: 180px; }
+.total { font-size: 2.5rem; font-weight: 700; margin: 8px 0; overflow-wrap: anywhere; }
+ul { padding-left: 20px; line-height: 1.8; }
+.insight { background: #fff5d7; padding: 12px; border-radius: 8px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+th, td { padding: 12px 8px; text-align: left; border-bottom: 1px solid #e5eae6; overflow-wrap: anywhere; }
+th:last-child, td:last-child { text-align: right; }
+[role=status] { font-size: .85rem; }
+[hidden] { display: none !important; }
+@media(max-width: 760px) { main { margin: 24px auto; padding: 0 16px; } .layout { grid-template-columns: 1fr; } section { padding: 20px; } }
